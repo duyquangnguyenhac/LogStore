@@ -79,6 +79,8 @@ func (s *Store) Read(pos uint64) ([]byte, error) {
 }
 
 // Reimplement the io.ReadAt interface
+// ReadAt takes in a byte array and an offset
+// It then read from the logStore at the given offset into the bytes array
 func (s *Store) ReadAt(p []byte, offset int64) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
