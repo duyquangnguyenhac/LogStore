@@ -1,6 +1,7 @@
 go 1.21.6
 
 use (
+	./api/v1
 	./internal/log
 	./log
 	./main

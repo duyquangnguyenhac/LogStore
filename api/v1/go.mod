@@ -1,4 +1,4 @@
-module distributed_systems_in_go/commit_log/api/v1
+module commit_log/api/v1
 
 go 1.21.6
 

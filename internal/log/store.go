@@ -7,25 +7,29 @@ import (
 	"sync"
 )
 
+var (
+	enc = binary.BigEndian
+)
+
 const (
 	length_of_uint64_in_bytes = 8
 )
 
-// Store is a file where we store our records
-type Store struct {
+// store is a file where we store our records
+type store struct {
 	file *os.File
 	mu   sync.Mutex
 	buf  *bufio.Writer
 	size uint64
 }
 
-func newStore(f *os.File) (*Store, error) {
+func newStore(f *os.File) (*store, error) {
 	fi_info, err := os.Stat(f.Name())
 	if err != nil {
 		return nil, err
 	}
 	size := uint64(fi_info.Size())
-	return &Store{
+	return &store{
 		file: f,
 		buf:  bufio.NewWriter(f),
 		size: size,
@@ -34,7 +38,7 @@ func newStore(f *os.File) (*Store, error) {
 
 // Append takes in a bytes array to write in our record.
 // Returns number of bytes written, the position, and error
-func (s *Store) Append(arr []byte) (uint64, uint64, error) {
+func (s *store) Append(arr []byte) (uint64, uint64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	pos := s.size
@@ -56,7 +60,7 @@ func (s *Store) Append(arr []byte) (uint64, uint64, error) {
 	return uint64(num_bytes_written), pos, err
 }
 
-func (s *Store) Read(pos uint64) ([]byte, error) {
+func (s *store) Read(pos uint64) ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// First we flush the buffer.
@@ -81,7 +85,7 @@ func (s *Store) Read(pos uint64) ([]byte, error) {
 // Reimplement the io.ReadAt interface
 // ReadAt takes in a byte array and an offset
 // It then read from the logStore at the given offset into the bytes array
-func (s *Store) ReadAt(p []byte, offset int64) (int, error) {
+func (s *store) ReadAt(p []byte, offset int64) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	err := s.buf.Flush()
@@ -91,7 +95,7 @@ func (s *Store) ReadAt(p []byte, offset int64) (int, error) {
 	return s.file.ReadAt(p, offset)
 }
 
-func (s *Store) Close() error {
+func (s *store) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	err := s.buf.Flush()
@@ -104,4 +108,8 @@ func (s *Store) Close() error {
 	} else {
 		return nil
 	}
+}
+
+func (s *store) Name() string {
+	return s.file.Name()
 }

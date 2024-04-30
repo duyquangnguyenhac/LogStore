@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package log.v1;
 
-option go_package = "distributed_systems_in_go/commit_log/api/v1";
+option go_package = "commit_log/api/v1";
 
 message Record {
     bytes value = 1;
