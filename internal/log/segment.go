@@ -25,7 +25,7 @@ type segmentReader struct {
 func (segReader *segmentReader) Read(input []byte) (int, error) {
 	bytes_read, err := segReader.segment.ReadRawRecord(input, segReader.currentOffset)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	// Move the segmentReader memoized offset by one
 	segReader.currentOffset++
