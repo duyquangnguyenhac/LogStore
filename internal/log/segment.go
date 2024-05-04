@@ -17,6 +17,21 @@ type segment struct {
 	config                 Config
 }
 
+type segmentReader struct {
+	segment       *segment
+	currentOffset uint64
+}
+
+func (segReader *segmentReader) Read(input []byte) (int, error) {
+	bytes_read, err := segReader.segment.ReadRawRecord(input, segReader.currentOffset)
+	if err != nil {
+		return err
+	}
+	// Move the segmentReader memoized offset by one
+	segReader.currentOffset++
+	return bytes_read, err
+}
+
 func newSegment(dir string, baseOffset uint64, c Config) (*segment, error) {
 	s := &segment{
 		baseOffset: baseOffset,
@@ -65,6 +80,21 @@ func (s *segment) Append(record *api.Record) (offset uint64, err error) {
 	}
 	s.nextOffset++
 	return cur, nil
+}
+
+// Function takes in a relative offset and read the bytes into the input params
+// in its bytes array form without marshalling the result
+func (s *segment) ReadRawRecord(input []byte, off uint64) (int, error) {
+	_, pos, err := s.index.Read(int64(off - s.baseOffset))
+	if err != nil {
+		return 0, nil
+	}
+	// Potential issue here converting to int64 for input to store.ReadAt interface.
+	bytes_read, err := s.store.ReadAt(input, int64(pos))
+	if err != nil {
+		return 0, nil
+	}
+	return bytes_read, err
 }
 
 func (s *segment) Read(off uint64) (*api.Record, error) {

@@ -2,7 +2,9 @@ package log_store
 
 import (
 	api "commit_log/api/v1"
-	"io/ioutil"
+	"fmt"
+	"io"
+	"os"
 	"path"
 	"sort"
 	"strconv"
@@ -46,8 +48,8 @@ func (log *Log) newSegment(baseOffset uint64) error {
 	return nil
 }
 
-func setup(log *Log) error {
-	files, err := ioutil.ReadDir(log.Dir)
+func (log *Log) setup() error {
+	files, err := os.ReadDir(log.Dir)
 	if err != nil {
 		return err
 	}
@@ -93,4 +95,100 @@ func (log *Log) Append(record *api.Record) (uint64, error) {
 		err = log.newSegment(off + 1)
 	}
 	return off, err
+}
+
+func (log *Log) Read(off uint64) (*api.Record, error) {
+	// Loop through segments and find the first segment that might contain our offset to read from
+	log.mu.RLock()
+	defer log.mu.RUnlock()
+
+	var s *segment
+	for _, segment := range log.segments {
+		if segment.baseOffset <= off && off < segment.nextOffset {
+			s = segment
+			break
+		}
+	}
+	if s == nil || s.nextOffset <= off {
+		return nil, fmt.Errorf("offset out of range: %d", off)
+	}
+
+	return s.Read(off)
+}
+
+func (log *Log) Close() error {
+	log.mu.Lock()
+	defer log.mu.Unlock()
+
+	for _, segment := range log.segments {
+		if err := segment.Close(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (log *Log) Remove() error {
+	if err := log.Close(); err != nil {
+		return err
+	}
+	return os.RemoveAll(log.Dir)
+}
+
+func (log *Log) Reset() error {
+	if err := log.Remove(); err != nil {
+		return err
+	}
+	return log.setup()
+}
+
+func (log *Log) LowestOffset() (uint64, error) {
+	log.mu.Lock()
+	defer log.mu.Unlock()
+
+	return log.segments[0].baseOffset, nil
+}
+
+func (log *Log) HighestOffset() (uint64, error) {
+	log.mu.Lock()
+	defer log.mu.Unlock()
+
+	offset := log.segments[len(log.segments)-1].nextOffset - 1
+	if offset == 0 {
+		return 0, nil
+	}
+	return offset, nil
+}
+
+// Truncate is used to accept an offset and remove all segments lower than the given lowest offset
+func (log *Log) Truncate(lowest uint64) error {
+	log.mu.Lock()
+	defer log.mu.Unlock()
+
+	var newSegments []*segment
+	for _, segment := range log.segments {
+		if segment.nextOffset-1 <= lowest {
+			if err := segment.Remove(); err != nil {
+				return err
+			}
+			continue
+		}
+		newSegments = append(newSegments, segment)
+	}
+	log.segments = newSegments
+	return nil
+}
+
+// TODO: Fix possible error
+// Reader returns an io.MultiReader that concatenate the segments information across their stores
+func (log *Log) Reader() io.Reader {
+	log.mu.RLock()
+	defer log.mu.RUnlock()
+
+	readers := make([]io.Reader, len(log.segments))
+	for i, segment := range log.segments {
+		readers[i] = &segmentReader{segment: segment, currentOffset: segment.baseOffset}
+	}
+	return io.MultiReader(readers...)
 }

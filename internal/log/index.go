@@ -43,6 +43,7 @@ func newIndex(f *os.File, c Config) (*index, error) {
 }
 
 // Takes an offset and return the associated record's position in the store.
+// It returns the calculated relative offset in the index, the absolute offset of the record in the store, and the error
 func (i *index) Read(in int64) (out uint32, pos uint64, err error) {
 	if i.size == 0 {
 		return 0, 0, io.EOF
