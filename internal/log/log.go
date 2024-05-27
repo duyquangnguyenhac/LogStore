@@ -83,6 +83,7 @@ func (log *Log) setup() error {
 	return nil
 }
 
+// Takes in a record and return the offset to the record that was appended.
 func (log *Log) Append(record *api.Record) (uint64, error) {
 	log.mu.Lock()
 	defer log.mu.Unlock()
@@ -97,6 +98,7 @@ func (log *Log) Append(record *api.Record) (uint64, error) {
 	return off, err
 }
 
+// Takes in an offset and return the record at that offset.
 func (log *Log) Read(off uint64) (*api.Record, error) {
 	// Loop through segments and find the first segment that might contain our offset to read from
 	log.mu.RLock()
@@ -180,15 +182,23 @@ func (log *Log) Truncate(lowest uint64) error {
 	return nil
 }
 
-// TODO: Fix possible error
-// Reader returns an io.MultiReader that concatenate the segments information across their stores
-func (log *Log) Reader() io.Reader {
-	log.mu.RLock()
-	defer log.mu.RUnlock()
+type originReader struct {
+	*store
+	off int64
+}
 
-	readers := make([]io.Reader, len(log.segments))
-	for i, segment := range log.segments {
-		readers[i] = &segmentReader{segment: segment, currentOffset: segment.baseOffset}
+func (o *originReader) Read(p []byte) (int, error) {
+	n, err := o.ReadAt(p, o.off)
+	o.off += int64(n)
+	return n, err
+}
+
+func (l *Log) Reader() io.Reader {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	readers := make([]io.Reader, len(l.segments))
+	for i, segment := range l.segments {
+		readers[i] = &originReader{segment.store, 0}
 	}
 	return io.MultiReader(readers...)
 }
